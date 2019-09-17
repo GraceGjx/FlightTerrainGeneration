@@ -1,0 +1,185 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+<title>Flight Terrain Generation</title>
+<meta charset="utf-8">
+</head>
+<script id="shader-vs" type="x-shader/x-vertex">
+   attribute vec3 aVertexNormal;
+   attribute vec3 aVertexPosition;
+
+   uniform mat4 uMVMatrix;
+   uniform mat4 uPMatrix;
+   uniform mat3 uNMatrix;
+
+   varying vec3 normalEye;
+   varying vec3 vertexPositionEye3;
+
+
+    varying vec4 vColor;
+
+
+    vec3 colorMap(){
+        float p = aVertexPosition.z;
+
+        //color map
+        vec3 blueColor = vec3(0.0 / 255.0,0.0 / 255.0, 205.0 / 255.0);
+        vec3 blueColor2 = vec3(100.0/255.0, 149.0/255.0, 237.0/255.0);
+        vec3 navyColor = vec3(0.0 / 255.0, 0.0 / 255.0, 128.0 / 255.0);
+        vec3 darkGreen = vec3(0.0/255.0, 100.0/255.0, 0.0/255.0);
+        vec3 lightGreen = vec3(120.0/255.0, 140.0/255.0, 100.0/255.0);
+        vec3 topColor = vec3(130.0/255.0, 140.0/255.0, 170.0/255.0);
+        vec3 darkyellowColor = vec3(170.0/255.0, 130.0/255.0, 20.0/255.0);
+        vec3 botColor = vec3(173.0/255.0, 150.0/255.0, 90.0/255.0);
+
+        if(p < -0.3){
+            return botColor;
+        }
+        else if(p < -0.2){
+            return darkyellowColor;
+        } else if (p < -0.1){
+            return navyColor;
+        } else if(p < 0.0){
+            return blueColor;
+        }
+        else if(p >= 0.0 && p <= 0.1){
+            return blueColor2;
+        } else if(p > 0.1 && p <= 0.25){
+            return darkGreen;
+        }  else if (p > 0.25 && p <= 0.4){
+            return lightGreen;
+        } else {
+            return topColor;
+        }
+    }
+
+    void main(void) {
+
+    //Get the vertex position in eye coordinates
+    vec4 vertexPositionEye4 = uMVMatrix * vec4(aVertexPosition, 1.0);
+    vertexPositionEye3 = vertexPositionEye4.xyz / vertexPositionEye4.w;
+
+    //Calculate the normal
+    normalEye = normalize(uNMatrix * aVertexNormal);
+
+    gl_Position = uPMatrix*uMVMatrix*vec4(aVertexPosition, 1.0);
+
+    vColor = vec4(colorMap(),1.0);
+
+    }
+</script>
+
+<script id="shader-fs-fog" type="x-shader/x-fragment">
+
+precision mediump float;
+
+varying vec3 normalEye;
+varying vec3 vertexPositionEye3;
+
+uniform vec3 uAmbientLightColor; //Ambient reflection coeff
+uniform vec3 uDiffuseLightColor; //Diffuse reflection coeff
+uniform vec3 uSpecularLightColor; //Sepcular reflection coeff
+uniform vec3 uLightPosition;
+
+uniform int checkStat;
+
+varying vec4 vColor;
+
+void main(void) {
+    vec3 normal = normalize(normalEye);
+    vec3 lightDir = normalize(uLightPosition-vertexPositionEye3);
+
+    //Lamber'ts cosine law
+    float lambertian = max(dot(lightDir, normal), 0.0);
+    float specular = 0.0;
+
+    if(lambertian > 0.0) {
+        vec3 viewDir = normalize(-vertexPositionEye3);
+
+        vec3 halfDir = normalize(lightDir+viewDir);
+        float specAngle = max(dot(halfDir, normal), 0.0);
+        specular = pow(specAngle, 30.0);
+    }
+
+    vec4 fragColor =vColor+ vec4(uAmbientLightColor+lambertian*uDiffuseLightColor+
+      specular*uSpecularLightColor, 1.0);
+
+    float fogCoord = (gl_FragCoord.z/gl_FragCoord.w);
+    vec4 fogColor = vec4(1.0, 1.0, 1.0, 1.0);
+    
+        //Compute fogFactor
+        const float LOG2 = 1.442695;
+        float fogDensity = 0.055;
+        float fogFactor = exp2( -fogDensity * fogDensity * fogCoord * fogCoord * LOG2 ); 
+        fogFactor = clamp(fogFactor, 0.0, 1.0); 
+
+        gl_FragColor = mix(fogColor, fragColor, fogFactor); 
+    
+}
+
+</script>
+    
+<script id="shader-fs" type="x-shader/x-fragment">
+
+precision mediump float;
+
+varying vec3 normalEye;
+varying vec3 vertexPositionEye3;
+
+uniform vec3 uAmbientLightColor; //Ambient reflection coeff
+uniform vec3 uDiffuseLightColor; //Diffuse reflection coeff
+uniform vec3 uSpecularLightColor; //Sepcular reflection coeff
+uniform vec3 uLightPosition;
+
+uniform int checkStat;
+
+varying vec4 vColor;
+
+void main(void) {
+    vec3 normal = normalize(normalEye);
+    vec3 lightDir = normalize(uLightPosition-vertexPositionEye3);
+
+    //Lamber'ts cosine law
+    float lambertian = max(dot(lightDir, normal), 0.0);
+    float specular = 0.0;
+
+    if(lambertian > 0.0) {
+        vec3 viewDir = normalize(-vertexPositionEye3);
+
+        vec3 halfDir = normalize(lightDir+viewDir);
+        float specAngle = max(dot(halfDir, normal), 0.0);
+        specular = pow(specAngle, 30.0);
+    }
+
+    gl_FragColor =vColor+ vec4(uAmbientLightColor+lambertian*uDiffuseLightColor+
+      specular*uSpecularLightColor, 1.0);    
+}
+
+</script>
+
+<script src="gl-matrix-min.js"></script>
+<script src="webgl-utils.js"></script>
+<script src="Terrain.js"></script>
+<script src="terrainGenerate.js"></script>
+<script src="hw2.js"></script>
+<body onload="startup();">
+ <canvas id="myGLCanvas" width="800" height="700"></canvas>
+    <form id="input_form" style="float: right; margin-top: 40vh">
+        <fieldset>
+            <legend>Control Parameters:</legend>
+            <label>"LEFT ARROW": roll left; <br>"RIGHT ARROW": roll right; <br></label>
+            <label>"UP ARROR": pitch up; <br>"DOWN ARROW": pitch down;<br></label>
+            <label>"+": increase speed; <br>"-": decrease speed;<br></label>
+            <label style="color:red">(No need to press ctrl or shift to change speed)</label>
+        </fieldset>
+        <fieldset>
+            <legend>Fog Option:</legend>
+            <label>
+                <input type="radio" name="fogOption" id="fog">Turn Fog on
+                <input type="radio" name="fogOption" id="noFog" checked> Turn Fog off
+            </label>
+        </fieldset>
+    </form>
+</body>
+
+</html>
